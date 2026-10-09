@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import numpy as np
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parents[2]
 ARTIFACTS_DIR = BASE_DIR / "data" / "artifacts"
 CLEAN_DATA_DIR = BASE_DIR / "data" / "processed"
 

@@ -33,21 +33,18 @@ def wendland_c2_gradient(d, r, h, sigma_f2):
     """
     Compute the gradient of the Wendland C2 kernel for a given distance r, bandwidth h, and scaling factor sigma_f2.
     """
-    if r < 1e-10:
+    if r == 0.0:
         return np.zeros_like(d)
     if r >= h:
         return np.zeros_like(d)
 
-    _, dphi, _ = wendland_c2_profile(np.array([r / h]))
-    radial_derivative = sigma_f2 * dphi[0] / h
-    direction = d / r
-    return radial_derivative * direction
+    return (-20.0 * sigma_f2 / h**2) * (1.0 - r / h)**3 * d
 
 def wendland_c2_hessian(d, r, h, sigma_f2):
     """
     Compute the Hessian of the Wendland C2 kernel for a given distance r, bandwidth h, and scaling factor sigma_f2.
     """
-    if r < 1e-10:
+    if r == 0.0:
         return np.eye(3, dtype=np.float64) * (-20.0 * sigma_f2 / h**2)
     if r >= h:
         return np.zeros((3, 3), dtype=np.float64)
@@ -59,3 +56,17 @@ def wendland_c2_hessian(d, r, h, sigma_f2):
     H = k_second * d_outer + k_prime * (np.eye(3, dtype=np.float64) - d_outer) / r
 
     return H
+
+def wendland_c2_hessian_vector_product(d, r, n, h, sigma_f2):
+    """Return Hessian(k) @ n without a matrix or singular radial factors."""
+    n = np.asarray(n, dtype=np.float64)
+    if r >= h:
+        return np.zeros_like(n)
+    scale = 20.0 * sigma_f2 / h**2
+    if r == 0.0:
+        return -scale * n
+    u = r / h
+    direction = np.asarray(d, dtype=np.float64) / r
+    return scale * (1.0 - u)**2 * (
+        -(1.0 - u) * n + 3.0 * u * direction * np.dot(direction, n)
+    )

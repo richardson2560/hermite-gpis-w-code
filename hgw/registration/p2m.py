@@ -6,6 +6,7 @@ import math
 import numpy as np
 from hgw.models.evaluator import HermiteGPIS_W
 from hgw.registration.se3 import exp_se3, log_se3
+from hgw.stats.deviance import DevianceConfig, deviance_test
 
 # Sentinel for "no valid covariance" (finite, symmetric, PD)
 _COV_SENTINEL = 1e12
@@ -120,6 +121,11 @@ def _residual_jacobian(x_model: np.ndarray, grad_model: np.ndarray) -> np.ndarra
     return grad_model @ J_data
 
 
+def _residual_jacobians(points, grads):
+    """Jacobian of left SE(3) increments, translation then rotation."""
+    return np.hstack([grads, np.cross(points, grads)])
+
+
 def _huber_cost(z: np.ndarray, k: float) -> float:
     """Sum of Huber loss over standardized residuals."""
     abs_z = np.abs(z)
@@ -155,6 +161,7 @@ def p2m_register(
     T_prior: np.ndarray | None = None,
     P_prior: np.ndarray | None = None,
     config: P2MConfig = P2MConfig(),
+    deviance_config: DevianceConfig = DevianceConfig(),
 ) -> P2MResult:
     """Run Gauss-Newton P2M registration with Huber weights and line search."""
     scene_points = np.asarray(scene_points, dtype=np.float64)
@@ -234,10 +241,7 @@ def p2m_register(
         inv_sigma_sq = 1.0 / (sigma_j ** 2)
         w_times_inv = weights * inv_sigma_sq
 
-        N = len(scene_points)
-        J = np.zeros((N, 6), dtype=np.float64)
-        for j in range(N):
-            J[j] = _residual_jacobian(points_in_model[j], grads[j])
+        J = _residual_jacobians(points_in_model, grads)
 
         # 3. Normal system
         H = J.T @ (w_times_inv[:, None] * J)
@@ -302,7 +306,9 @@ def p2m_register(
     sigma_j = np.sqrt(variances + sigma_0_sq)
     z = means / sigma_j
     weights = _huber_weights(z, config.huber_k)
-    inlier_mask = weights > 0.5
+    # Robust optimization weights do not define statistical inliers.
+    dev = deviance_test(scene_points, T, model, config=deviance_config)
+    inlier_mask = dev.inlier_mask
     n_inliers = int(np.sum(inlier_mask))
     active_fraction = model.support_fraction(points_in_model)
 
@@ -312,10 +318,7 @@ def p2m_register(
         residual_rms = math.inf
 
     # Final information matrix (without damping)
-    N = len(scene_points)
-    J = np.zeros((N, 6), dtype=np.float64)
-    for j in range(N):
-        J[j] = _residual_jacobian(points_in_model[j], grads[j])
+    J = _residual_jacobians(points_in_model, grads)
 
     inv_sigma_sq = 1.0 / (sigma_j ** 2)
     w_times_inv = weights * inv_sigma_sq
@@ -331,6 +334,9 @@ def p2m_register(
     if not converged:
         status = "NOT_CONVERGED"
         reason = last_reason or f"reached max_iterations ({config.max_iterations})"
+    elif active_fraction < config.min_active_fraction:
+        status = "REJECTED"
+        reason = "final active fraction below threshold"
     elif n_inliers < config.min_points:
         status = "REJECTED"
         reason = f"too few inliers ({n_inliers})"

@@ -66,7 +66,7 @@ def generate_hermite_seeds(
     min_active_fraction: float = 0.1,
     top_k: int = 2,
 ) -> list[np.ndarray]:
-    """Generate candidate SE(3) poses via Hermite anchor seeding."""
+    """Generate poses; return an empty list when no seed passes support."""
     scene_points = np.asarray(scene_points, dtype=np.float64)
     scene_normals = np.asarray(scene_normals, dtype=np.float64)
 
@@ -94,6 +94,13 @@ def generate_hermite_seeds(
         raise ValueError("n_axial_angles must be at least 1")
     if top_k < 1:
         raise ValueError("top_k must be at least 1")
+
+    if n_eval < 1:
+        raise ValueError("n_eval must be at least 1")
+    if not 0.0 <= min_active_fraction <= 1.0:
+        raise ValueError("min_active_fraction must be in [0, 1]")
+    if not np.isfinite(tau_axis) or tau_axis < 0.0:
+        raise ValueError("tau_axis must be finite and non-negative")
 
     q_star, n_star = _select_anchor(scene_points, scene_normals)
     model_points = model._points 
@@ -133,11 +140,6 @@ def generate_hermite_seeds(
         if frac >= min_active_fraction:
             ranked.append((frac, T))
 
-    if not ranked:
-        raise ValueError(
-            "no seed passed the active-support filter; "
-            "check h, tau_axis, and min_active_fraction"
-        )
 
     ranked.sort(key=lambda item: item[0], reverse=True)
     return [T for _, T in ranked[:top_k]]

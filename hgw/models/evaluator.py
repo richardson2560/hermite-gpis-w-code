@@ -7,7 +7,7 @@ from scipy.spatial import cKDTree
 from hgw.core.kernels import (
     wendland_c2_value,
     wendland_c2_gradient,
-    wendland_c2_hessian,
+    wendland_c2_hessian_vector_product,
 )
 from hgw.models.artifact import ModelArtifact
 
@@ -71,8 +71,8 @@ class HermiteGPIS_W:
         if len(X) == 0:
             return 0.0
 
-        neighbors = self._tree.query_ball_point(X, r=self._h)
-        return float(np.mean([len(nb) > 0 for nb in neighbors]))
+        distances, _ = self._tree.query(X, k=1)
+        return float(np.mean(distances < self._h))
 
     def evaluate(self, x: np.ndarray) -> tuple[float, np.ndarray, float]:
         x_arr = np.asarray(x, dtype=np.float64)
@@ -119,16 +119,19 @@ class HermiteGPIS_W:
                 n_i = self._normals[i]
                 d = x_q - p_i
                 r = float(np.linalg.norm(d))
+                if r >= self._h:
+                    continue
 
-                k_val = float(wendland_c2_value(np.array([r]), self._h, self._sigma_f2)[0])
+                u = r / self._h
+                k_val = self._sigma_f2 * (1.0 - u)**4 * (4.0 * u + 1.0)
                 k_grad = wendland_c2_gradient(d, r, self._h, self._sigma_f2)
-                k_hess = wendland_c2_hessian(d, r, self._h, self._sigma_f2)
+                hess_n = wendland_c2_hessian_vector_product(d, r, n_i, self._h, self._sigma_f2)
 
                 alpha_v = self._alpha[2 * i]
                 alpha_d = self._alpha[2 * i + 1]
 
                 m_val += alpha_v * k_val + alpha_d * (-float(k_grad @ n_i))
-                g_val += alpha_v * k_grad + alpha_d * (-k_hess @ n_i)
+                g_val += alpha_v * k_grad - alpha_d * hess_n
                 
                 if r < best_r:
                     best_r = r

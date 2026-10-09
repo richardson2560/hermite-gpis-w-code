@@ -59,12 +59,13 @@ def pivoted_cholesky(
 
     for k in range(m_target):
         j = int(np.argmax(d))
-        if d[j] < eps_tol:
+        if d[j] <= 0.0 or d[j] < eps_tol:
             break
         pivots[n_selected] = j
         n_selected += 1
         distances = np.linalg.norm(points - points[j], axis=1)
         k_col = wendland_c2_value(distances, h, sigma_f2)
+        k_col[j] += sigma_0_sq
         if k == 0:
             L[:, 0] = k_col / np.sqrt(d[j])
         else:
@@ -72,5 +73,6 @@ def pivoted_cholesky(
             L[:, k] = (k_col - correction) / np.sqrt(d[j])
         d = d - L[:, k] ** 2
         np.maximum(d, 0.0, out=d)
+        d[pivots[:n_selected]] = 0.0
 
     return pivots[:n_selected]

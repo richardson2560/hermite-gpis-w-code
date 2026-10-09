@@ -123,7 +123,11 @@ def deviance_test(
     expected_point_count: int | None = None,
     config: DevianceConfig = DevianceConfig(),
 ) -> DevianceResult:
-    """Run the complete deviance test pipeline."""
+    """Run nominal deviance diagnostics.
+
+    Local trimming, spatial correlation, and pose fitting invalidate an exact
+    chi-square null law. Calibrate thresholds before claiming test size.
+    """
     r_data = compute_residuals(scene_points, T, model, config)
     N_total = len(scene_points)
     if expected_point_count is None:
@@ -153,7 +157,7 @@ def deviance_test(
             if M_inliers > 0 else math.inf
         )
         p_value = (
-            float(1.0 - chi2.cdf(Q, df=M_inliers))
+            float(chi2.sf(Q, df=M_inliers))
             if M_inliers > 0 else 0.0
         )
         return DevianceResult(
@@ -190,7 +194,7 @@ def deviance_test(
     # --- Global statistic --------------------------------------------------
     Q = float(np.sum(e_j[inlier_mask]))
     threshold = float(chi2.ppf(1.0 - config.alpha_global, df=M_inliers))
-    p_value = float(1.0 - chi2.cdf(Q, df=M_inliers))
+    p_value = float(chi2.sf(Q, df=M_inliers))
 
     # --- Deviance gate -----------------------------------------------------
     if Q > threshold:

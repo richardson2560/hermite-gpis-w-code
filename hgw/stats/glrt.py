@@ -33,14 +33,18 @@ class ModelCandidate:
 
 @dataclass(frozen=True)
 class GLRTConfig:
-    """Configuration for the GLRT model selection."""
+    """Configuration for heuristic model selection.
+
+    The default chi-square gap is not a calibrated Wilks test for non-nested
+    objects or model-dependent inlier sets; calibrate it on held-out scenes.
+    """
 
     delta_score_threshold: float = float(chi2.ppf(0.95, df=1))  # ≈ 3.841
     deviance_config: DevianceConfig = DevianceConfig()
 
     def __post_init__(self) -> None:
-        if self.delta_score_threshold <= 0.0:
-            raise ValueError("delta_score_threshold must be positive")
+        if not math.isfinite(self.delta_score_threshold) or self.delta_score_threshold <= 0.0:
+            raise ValueError("delta_score_threshold must be positive and finite")
 
 @dataclass(frozen=True)
 class PerModelResult:
